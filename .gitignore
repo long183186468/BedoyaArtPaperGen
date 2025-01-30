@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# PyInstaller
+*.spec
+
+# IDE
+.idea/
+.vscode/
+
+# Virtual Environment
+venv/
+env/
+
+# Temporary files
+*.tmp
+temp_print.png
+
+# Windows
+Thumbs.db
+Desktop.ini 

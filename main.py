@@ -122,11 +122,15 @@ class MainWindow(QMainWindow):
         self.name_input.setPlaceholderText("输入学生姓名")
         self.id_input = QLineEdit()
         self.id_input.setPlaceholderText("输入学号")
+        self.subject_input = QLineEdit()
+        self.subject_input.setPlaceholderText("输入课程主题")
         
         info_layout.addWidget(QLabel("学生姓名:"))
         info_layout.addWidget(self.name_input)
         info_layout.addWidget(QLabel("学号ID:"))
         info_layout.addWidget(self.id_input)
+        info_layout.addWidget(QLabel("课程主题:"))
+        info_layout.addWidget(self.subject_input)
         
         # Logo设置
         logo_group = QGroupBox("Logo设置")
@@ -148,7 +152,11 @@ class MainWindow(QMainWindow):
         paper_layout = QVBoxLayout(paper_group)
         
         self.paper_group = QButtonGroup(self)
-        sizes = [("A4 横向", "A4"), ("A3 横向", "A3"), ("自定义", "custom")]
+        sizes = [
+            ("A4 横向", "A4"),
+            ("A3 横向", "A3"),
+            ("自定义", "custom")
+        ]
         
         for text, value in sizes:
             radio = QRadioButton(text)
@@ -163,10 +171,10 @@ class MainWindow(QMainWindow):
         
         self.width_input = QSpinBox()
         self.width_input.setRange(1, 1000)
-        self.width_input.setValue(297)
+        self.width_input.setValue(40)  # 默认宽度为40mm
         self.height_input = QSpinBox()
         self.height_input.setRange(1, 1000)
-        self.height_input.setValue(210)
+        self.height_input.setValue(20)  # 默认高度为20mm
         
         custom_layout.addWidget(QLabel("宽(mm):"))
         custom_layout.addWidget(self.width_input)
@@ -302,16 +310,23 @@ class MainWindow(QMainWindow):
     
     def getPaperSize(self):
         checked_button = self.paper_group.checkedButton()
-        if checked_button.text() == "A4 横向":
-            return (297, 210)
-        elif checked_button.text() == "A3 横向":
-            return (420, 297)
-        else:
+        text = checked_button.text()
+        
+        # 预定义尺寸
+        if text == "A4 横向":
+            return config.PAPER_SIZES["A4"]
+        elif text == "A3 横向":
+            return config.PAPER_SIZES["A3"]
+        elif text == "自定义":
             return (self.width_input.value(), self.height_input.value())
+        
+        # 默认返回A4尺寸
+        return config.PAPER_SIZES["A4"]
     
     def generatePreview(self):
         name = self.name_input.text().strip()
         student_id = self.id_input.text().strip()
+        subject = self.subject_input.text().strip()
         
         if not name or not student_id:
             QMessageBox.warning(self, "提示", "请输入学生姓名和学号！")
@@ -327,7 +342,8 @@ class MainWindow(QMainWindow):
                 name,
                 paper_size_mm=paper_size,
                 qr_size_percent=qr_size_percent,
-                logo_path=self.logo_path
+                logo_path=self.logo_path,
+                subject=subject
             )
             
             # 更新预览

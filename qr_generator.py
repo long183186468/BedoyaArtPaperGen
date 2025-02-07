@@ -7,17 +7,26 @@ def mm_to_pixels(mm, dpi=300):
     """将毫米转换为像素"""
     return int(mm * dpi / 25.4)
 
-def resize_keep_aspect(image, target_height):
-    """调整图像大小，保持宽高比，以高度为准"""
-    if isinstance(target_height, tuple):
-        target_height = target_height[1]
+def resize_keep_aspect(image, target_size):
+    """调整图像大小，保持宽高比"""
+    if isinstance(target_size, tuple):
+        target_width, target_height = target_size
+    else:
+        target_width = target_height = target_size
+        
     width, height = image.size
     aspect = width / height
-    new_height = target_height
-    new_width = int(target_height * aspect)
+    
+    if aspect > target_width / target_height:
+        new_width = target_width
+        new_height = int(target_width / aspect)
+    else:
+        new_height = target_height
+        new_width = int(target_height * aspect)
+    
     return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-def generate_qr_code(student_id, name, paper_size_mm=(297, 210), qr_size_percent=0.08, logo_path=None):
+def generate_qr_code(student_id, name, paper_size_mm=(297, 210), qr_size_percent=0.08, logo_path=None, subject=None):
     """生成标准格式的标签，包含logo、二维码和姓名"""
     try:
         # 将毫米转换为像素
@@ -28,74 +37,192 @@ def generate_qr_code(student_id, name, paper_size_mm=(297, 210), qr_size_percent
         # 创建白色背景
         final_image = Image.new('RGB', size, 'white')
         
-        # 计算二维码尺寸（以纸张高度的百分比为准）
-        qr_size = int(height_pixels * qr_size_percent)
+        # 判断是否使用全画幅布局（当尺寸小于100mm或是自定义尺寸时）
+        is_full_layout = (min(paper_size_mm) < 100 or 
+                         paper_size_mm not in [config.PAPER_SIZES["A4"], config.PAPER_SIZES["A3"]])
         
-        # 创建二维码
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_H,
-            box_size=10,
-            border=1,
-        )
-        qr.add_data(f"ID:{student_id}\nName:{name}")
-        qr.make(fit=True)
-        
-        # 生成二维码图像
-        qr_image = qr.make_image(fill_color="black", back_color="white")
-        qr_image = qr_image.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
-        
-        # 加载logo
-        logo = None
-        logo_height = int(qr_size * 0.8)  # Logo高度为二维码的80%
-        if logo_path is None:
-            logo_path = config.DEFAULT_LOGO
+        if is_full_layout:
+            # 全画幅模式布局
+            margin_pixels = mm_to_pixels(2)  # 2mm边距
+            content_width = width_pixels - 2 * margin_pixels
+            content_height = height_pixels - 2 * margin_pixels
             
-        try:
-            if os.path.exists(logo_path):
-                logo = Image.open(logo_path)
-                # 保持logo原始比例
-                logo = resize_keep_aspect(logo, logo_height)
-        except Exception as e:
-            print(f"无法加载Logo: {str(e)}")
-            return None
-        
-        # 计算右下角标签区域
-        margin_mm = 5  # 边距5mm
-        margin_pixels = mm_to_pixels(margin_mm)
-        
-        # 计算二维码位置（右下角）
-        qr_x = width_pixels - qr_size - margin_pixels
-        qr_y = height_pixels - qr_size - margin_pixels - mm_to_pixels(5)  # 留出文字空间
-        
-        # 如果有logo，计算logo位置（在二维码左侧）
-        if logo:
-            logo_x = qr_x - logo.size[0] - mm_to_pixels(3)  # 间距3mm
-            logo_y = qr_y + (qr_size - logo.size[1]) // 2  # 垂直居中对齐
-            final_image.paste(logo, (logo_x, logo_y))
-        
-        # 放置二维码
-        final_image.paste(qr_image, (qr_x, qr_y))
-        
-        # 添加文字
-        draw = ImageDraw.Draw(final_image)
-        try:
-            # 字体大小为二维码尺寸的15%
+            # 计算二维码尺寸（占据45%宽度）
+            qr_size = int(content_width * 0.45)
+            
+            # 创建二维码
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,
+                box_size=10,
+                border=1,
+            )
+            qr_data = f"ID:{student_id}\nName:{name}"
+            if subject:
+                qr_data += f"\nSubject:{subject}"
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            
+            # 生成二维码图像
+            qr_image = qr.make_image(fill_color="black", back_color="white")
+            qr_image = qr_image.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+            
+            # 加载和调整Logo大小（占据45%宽度）
+            if logo_path is None:
+                logo_path = config.DEFAULT_LOGO
+                
+            try:
+                if os.path.exists(logo_path):
+                    logo = Image.open(logo_path)
+                    logo_width = int(content_width * 0.45)
+                    logo_height = int(content_height * 0.9)  # 高度占90%
+                    logo = resize_keep_aspect(logo, (logo_width, logo_height))
+            except Exception as e:
+                print(f"无法加载Logo: {str(e)}")
+                return None
+            
+            # Logo放在左边
+            if logo:
+                logo_x = margin_pixels
+                # 调整logo垂直位置，考虑文字空间
+                font_size = int(min(width_pixels, height_pixels) * 0.12)  # 增大字体尺寸
+                text_space = int(font_size * 3)  # 为两行文字和间距预留空间
+                logo_y = (height_pixels - logo.size[1] - text_space) // 2
+                final_image.paste(logo, (logo_x, logo_y))
+                
+                # 在Logo下方添加文字
+                draw = ImageDraw.Draw(final_image)
+                try:
+                    font = ImageFont.truetype(config.FONT_PATH, font_size)
+                except:
+                    font = ImageFont.load_default()
+                
+                # 计算文字位置（在Logo下方）
+                text_x = logo_x
+                text_y = logo_y + logo.size[1] + margin_pixels
+                
+                # 绘制姓名行
+                name_text = f"姓名：{name}"
+                draw.text((text_x, text_y), name_text, fill="black", font=font)
+                
+                # 绘制ID行
+                id_text = f"ID：{student_id}"
+                draw.text((text_x, text_y + int(font_size * 1.5)), id_text, fill="black", font=font)
+                
+                # 绘制课程主题行
+                if subject:
+                    subject_text = f"主题：{subject}"
+                    draw.text((text_x, text_y + int(font_size * 3)), subject_text, fill="black", font=font)
+            
+            # 二维码放在右边，垂直居中
+            qr_x = width_pixels - qr_size - margin_pixels
+            qr_y = (height_pixels - qr_size) // 2
+            final_image.paste(qr_image, (qr_x, qr_y))
+            
+        else:
+            # 标准布局模式（右下角小尺寸）
+            # 计算二维码基础尺寸（以较短边的8%为基准）
+            base_size = min(width_pixels, height_pixels)
+            qr_size = int(base_size * qr_size_percent)
+            
+            # 创建二维码
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,
+                box_size=10,
+                border=1,
+            )
+            qr_data = f"ID:{student_id}\nName:{name}"
+            if subject:
+                qr_data += f"\nSubject:{subject}"
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            
+            # 生成二维码图像
+            qr_image = qr.make_image(fill_color="black", back_color="white")
+            qr_image = qr_image.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+            
+            # 加载logo
+            logo = None
+            if logo_path is None:
+                logo_path = config.DEFAULT_LOGO
+                
+            # 计算字体大小（二维码尺寸的15%）
             font_size = int(qr_size * 0.15)
-            font = ImageFont.truetype(config.FONT_PATH, font_size)
-        except:
-            font = ImageFont.load_default()
-        
-        # 在二维码下方显示姓名和学号
-        text = f"{name} {student_id}"
-        text_width = draw.textlength(text, font=font)
-        text_x = qr_x + (qr_size - text_width) // 2  # 在二维码下方居中
-        text_y = qr_y + qr_size + mm_to_pixels(1)    # 二维码下方1mm
-        
-        # 绘制文字
-        draw.text((text_x, text_y), text, fill="black", font=font)
+            # 确保字体大小不超过合理范围
+            max_font_size = mm_to_pixels(3)  # 最大3mm
+            font_size = min(font_size, max_font_size)
+            
+            # 计算文字高度
+            text_height = int(font_size * 3.3)  # 三行文字加间距
+            
+            # 计算logo应该的高度（总高度减去文字高度和间距）
+            logo_height = qr_size - text_height - mm_to_pixels(1)  # 1mm为文字间距
+            
+            try:
+                if os.path.exists(logo_path):
+                    logo = Image.open(logo_path)
+                    # 调整logo大小，宽度为二维码宽度，高度为计算出的高度
+                    logo = resize_keep_aspect(logo, (qr_size, logo_height))
+            except Exception as e:
+                print(f"无法加载Logo: {str(e)}")
+                return None
+            
+            # 计算边距（以毫米为单位）
+            margin_mm = 5
+            margin_pixels = mm_to_pixels(margin_mm)
+            
+            if logo:
+                # 计算左侧整体高度（logo + 文字）
+                left_total_height = logo.size[1] + mm_to_pixels(1) + text_height  # 1mm间距
+                
+                # 计算整体宽度
+                total_width = qr_size * 2 + mm_to_pixels(2)  # 两个相同宽度的元素加2mm间距
+                
+                # 计算整体的起始位置（靠右对齐）
+                start_x = width_pixels - margin_pixels - total_width
+                
+                # 放置Logo（在左边）
+                logo_x = start_x
+                logo_y = height_pixels - margin_pixels - left_total_height
+                final_image.paste(logo, (logo_x, logo_y))
+                
+                # 添加文字（在Logo下方）
+                draw = ImageDraw.Draw(final_image)
+                try:
+                    font = ImageFont.truetype(config.FONT_PATH, font_size)
+                except:
+                    font = ImageFont.load_default()
+                
+                # 计算文字位置
+                text_x = logo_x
+                text_y = logo_y + logo.size[1] + mm_to_pixels(1)  # 1mm间距
+                
+                # 绘制姓名行
+                name_text = f"姓名：{name}"
+                draw.text((text_x, text_y), name_text, fill="black", font=font)
+                
+                # 绘制ID行（减小行间距）
+                id_text = f"ID：{student_id}"
+                draw.text((text_x, text_y + int(font_size * 1.1)), id_text, fill="black", font=font)
+                
+                # 绘制课程主题行
+                if subject:
+                    subject_text = f"主题：{subject}"
+                    draw.text((text_x, text_y + int(font_size * 2.2)), subject_text, fill="black", font=font)
+                
+                # 放置二维码（在右边）
+                qr_x = start_x + qr_size + mm_to_pixels(2)  # 2mm间距
+                qr_y = height_pixels - margin_pixels - qr_size
+                final_image.paste(qr_image, (qr_x, qr_y))
+            else:
+                # 如果没有Logo，只显示二维码
+                qr_x = width_pixels - margin_pixels - qr_size
+                qr_y = height_pixels - margin_pixels - qr_size
+                final_image.paste(qr_image, (qr_x, qr_y))
         
         return final_image
+        
     except Exception as e:
         print(f"生成二维码失败: {str(e)}")
         return None

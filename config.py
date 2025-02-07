@@ -1,5 +1,7 @@
 import json
 import os
+import sys
+import platform
 
 CONFIG_FILE = "settings.json"
 
@@ -9,8 +11,38 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # 默认logo路径
 DEFAULT_LOGO = os.path.join(CURRENT_DIR, "logo.png")
 
-# 默认字体路径（使用Windows系统字体）
-FONT_PATH = "C:\\Windows\\Fonts\\simhei.ttf"  # 使用黑体
+# 根据操作系统选择默认字体
+def get_default_font_path():
+    system = platform.system()
+    if system == "Windows":
+        font_paths = [
+            "C:\\Windows\\Fonts\\simhei.ttf",  # 黑体
+            "C:\\Windows\\Fonts\\msyh.ttc",    # 微软雅黑
+            "C:\\Windows\\Fonts\\simsun.ttc"   # 宋体
+        ]
+    elif system == "Darwin":  # macOS
+        font_paths = [
+            "/System/Library/Fonts/PingFang.ttc",
+            "/System/Library/Fonts/STHeiti Light.ttc",
+            "/System/Library/Fonts/STHeiti Medium.ttc"
+        ]
+    else:  # Linux
+        font_paths = [
+            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+        ]
+    
+    # 返回第一个存在的字体文件路径
+    for path in font_paths:
+        if os.path.exists(path):
+            return path
+            
+    # 如果没有找到合适的字体，返回默认值
+    return "C:\\Windows\\Fonts\\simhei.ttf"
+
+# 默认字体路径
+FONT_PATH = get_default_font_path()
 
 # 默认图片尺寸
 DEFAULT_SIZE = (800, 400)  # 宽度800像素，高度400像素
@@ -24,6 +56,20 @@ DEFAULT_CONFIG = {
         "A4": (297, 210),  # 横向A4
         "A3": (420, 297)   # 横向A3
     },
+    
+    # 标签打印尺寸（单位：毫米）
+    "LABEL_PRINTER_SIZES": [
+        {'width': 102, 'height': 51},  # 102mm x 51mm
+        {'width': 102, 'height': 76},  # 102mm x 76mm
+        {'width': 102, 'height': 102}  # 102mm x 102mm
+    ],
+    
+    "LABEL_SIZES": [
+        {'width': 30, 'height': 20},  # 30mm x 20mm
+        {'width': 50, 'height': 30},  # 50mm x 30mm
+        {'width': 40, 'height': 20},  # 40mm x 20mm
+        {'width': 40, 'height': 30}   # 40mm x 30mm
+    ],
     
     # 二维码默认设置
     "QR_CODE_SIZE_PERCENT": 15,    # 二维码大小（相对于纸张短边的百分比）
@@ -63,6 +109,8 @@ config = load_config()
 # 导出配置项
 DEFAULT_LOGO = config["DEFAULT_LOGO"]
 PAPER_SIZES = config["PAPER_SIZES"]
+LABEL_PRINTER_SIZES = config["LABEL_PRINTER_SIZES"]
+LABEL_SIZES = config["LABEL_SIZES"]
 QR_CODE_SIZE_PERCENT = config["QR_CODE_SIZE_PERCENT"]
 QR_MARGIN = config["QR_MARGIN"]
 QR_NAME_FONT_SIZE = config["QR_NAME_FONT_SIZE"]
